@@ -1,0 +1,6 @@
+{
+  "name": "TPMODZ",
+  "description": "Siêu nhẹ VPN lag switch và fake ping simulator tối ưu mượt mà cho game thủ",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

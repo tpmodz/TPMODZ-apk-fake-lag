@@ -1,0 +1,31 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    
+    <!-- Outer WiFi Latency Wave - Neon Purple -->
+    <path
+        android:pathData="M24,28 C40,16 68,16 84,28"
+        android:strokeColor="#9D4EDD"
+        android:strokeWidth="5"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000" />
+        
+    <!-- Inner WiFi Latency Wave - Neon Green -->
+    <path
+        android:pathData="M34,40 C46,31 62,31 74,40"
+        android:strokeColor="#00FF66"
+        android:strokeWidth="5"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000" />
+
+    <!-- Power Lightning Booster - White & Neon Green -->
+    <path
+        android:pathData="M56,38 L38,62 L52,62 L48,84 L70,56 L54,56 Z"
+        android:fillColor="#00FF66"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2.5"
+        android:strokeLineJoin="round" />
+        
+</vector>
