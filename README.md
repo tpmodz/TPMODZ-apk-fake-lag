@@ -1,21 +1,35 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
-</div>
+# ⚡ TPMODZ FAKE LAG
 
-# Run and deploy your AI Studio app
+<p align="center">
+  <img src="https://img.shields.io/badge/TPMODZ-FAKE%20LAG-7A5CFF?style=for-the-badge">
+  <img src="https://img.shields.io/badge/NETWORK-CONTROL-00C8FF?style=for-the-badge">
+  <img src="https://img.shields.io/badge/UI-CYBER-black?style=for-the-badge">
+</p>
 
-This contains everything you need to run your app locally.
+---
 
-View your app in AI Studio: https://ai.studio/apps/381ae862-60b8-4fc9-8f64-0519a8af4317
+# 🌌 About
 
-## Run Locally
+TPMODZ Fake Lag là ứng dụng mô phỏng điều khiển mạng với giao diện cyber neon xanh tím đen.
 
-**Prerequisites:**  [Android Studio](https://developer.android.com/studio)
+Ứng dụng hỗ trợ:
+- Delay mạng
+- Upload limiter
+- Download limiter
+- Both mode
+- App selector
+- Floating button
+- Lite performance
 
+---
 
-1. Open Android Studio
-2. Select **Open** and choose the directory containing this project
-3. Allow Android Studio to fix any incompatibilities as it imports the project.
-4. Create a file named `.env` in the project directory and set `GEMINI_API_KEY` in that file to your Gemini API key (see `.env.example` for an example)
-5. Remove this line from the app's `build.gradle.kts` file: `signingConfig = signingConfigs.getByName("debugConfig")`
-6. Run the app on an emulator or physical device
+# 🖥 Main Menu
+
+```txt
+• START
+• STOP
+• APP SELECTOR
+• UPLOAD DELAY
+• DOWNLOAD DELAY
+• BOTH MODE
+• SETTINGS
