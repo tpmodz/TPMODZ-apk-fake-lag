@@ -1,21 +1,23 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
-</div>
+# ⚡ TPMODZ FAKE LAG
 
-# Run and deploy your AI Studio app
+<p align="center">
+  <img src="https://i.pinimg.com/736x/3e/ef/8b/3eef8b6738eea83501ee2ac644e217eb.jpg" width="100%">
+</p>
 
-This contains everything you need to run your app locally.
+<h1 align="center">TPMODZ LAG</h1>
 
-View your app in AI Studio: https://ai.studio/apps/381ae862-60b8-4fc9-8f64-0519a8af4317
+<p align="center">
+  <img src="https://img.shields.io/badge/STATUS-ACTIVE-7A5CFF?style=for-the-badge">
+  <img src="https://img.shields.io/badge/SYSTEM-CYBER-00C8FF?style=for-the-badge">
+  <img src="https://img.shields.io/badge/BUILD-LITE-black?style=for-the-badge">
+</p>
 
-## Run Locally
+---
 
-**Prerequisites:**  [Android Studio](https://developer.android.com/studio)
+# 🌌 SYSTEM INFO
 
-
-1. Open Android Studio
-2. Select **Open** and choose the directory containing this project
-3. Allow Android Studio to fix any incompatibilities as it imports the project.
-4. Create a file named `.env` in the project directory and set `GEMINI_API_KEY` in that file to your Gemini API key (see `.env.example` for an example)
-5. Remove this line from the app's `build.gradle.kts` file: `signingConfig = signingConfigs.getByName("debugConfig")`
-6. Run the app on an emulator or physical device
+```txt
+TPMODZ Fake Lag
+Network Delay Simulator
+Cyber Neon Interface
+Blue Purple Black Theme
