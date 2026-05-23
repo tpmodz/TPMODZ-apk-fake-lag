@@ -19,6 +19,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.collectLatest
 import java.io.IOException
 
 class TpVpnService : VpnService() {
@@ -68,42 +70,56 @@ class TpVpnService : VpnService() {
 
         serviceJob?.cancel()
         serviceJob = scope.launch {
-            runLagLoop()
+            runStateUpdates()
         }
 
         return START_STICKY
     }
 
-    private suspend fun runLagLoop() {
-        while (VpnStateTracker.isVpnActive.value) {
-            val isDisconnect = VpnStateTracker.isDisconnecting.value
-            val isFakePing = VpnStateTracker.isFakePingEnabled.value
-            val pingVal = VpnStateTracker.fakePingValue.value
-            val selected = VpnStateTracker.selectedPackages.value
+    private data class VpnStateConfig(
+        val isDisconnect: Boolean,
+        val isFakePing: Boolean,
+        val pingVal: Int,
+        val selected: Set<String>
+    )
 
-            if (isDisconnect) {
-                // 100% total packet blocking for Selected apps
+    private suspend fun runStateUpdates() {
+        combine(
+            VpnStateTracker.isDisconnecting,
+            VpnStateTracker.isFakePingEnabled,
+            VpnStateTracker.fakePingValue,
+            VpnStateTracker.selectedPackages
+        ) { isDisconnect, isFakePing, pingVal, selected ->
+            VpnStateConfig(isDisconnect, isFakePing, pingVal, selected)
+        }.collectLatest { config ->
+            if (!VpnStateTracker.isVpnActive.value) {
+                closeTunnel()
+                return@collectLatest
+            }
+
+            if (config.isDisconnect) {
                 VpnStateTracker.setLivePing(999)
-                ensureTunnelEstablished(selected)
-                delay(200)
-            } else if (isFakePing && selected.isNotEmpty()) {
-                VpnStateTracker.setLivePing(pingVal)
-                val blockDuration = pingVal.coerceIn(10, 999).toLong()
-                
-                // Establish tunnel to block outbound traffic
-                ensureTunnelEstablished(selected)
-                delay(blockDuration)
-
-                // Momentarily release tunnel to let game heartbeat packets through, simulating real ping delay
-                closeTunnel()
-                delay(120)
+                ensureTunnelEstablished(config.selected)
+                // We keep the tunnel open continuously while blocking.
+                // It will be instantly torn down the moment isDisconnect changes to false (canceled by collectLatest).
+                delay(Long.MAX_VALUE)
+            } else if (config.isFakePing && config.selected.isNotEmpty()) {
+                VpnStateTracker.setLivePing(config.pingVal)
+                val blockDuration = config.pingVal.coerceIn(10, 999).toLong()
+                while (true) {
+                    ensureTunnelEstablished(config.selected)
+                    delay(blockDuration)
+                    closeTunnel()
+                    delay(120)
+                }
             } else {
-                VpnStateTracker.setLivePing(15) // Simulated default gaming ping is fast
+                VpnStateTracker.setLivePing(15)
                 closeTunnel()
-                delay(500)
+                // Keep the tunnel closed (internet active).
+                // It will instantly reactivate when any state changes (canceled by collectLatest).
+                delay(Long.MAX_VALUE)
             }
         }
-        closeTunnel()
     }
 
     @Synchronized
@@ -137,9 +153,8 @@ class TpVpnService : VpnService() {
 
             // Route DNS to our local blackhole so domain lookup falls back or stalls instantly
             try {
-                builder.addDnsServer("8.8.8.8")
-                builder.addDnsServer("1.1.1.1")
-                builder.addDnsServer("2001:4860:4860::8888")
+                builder.addDnsServer("10.0.0.1")
+                builder.addDnsServer("fd00::1")
             } catch (e: Exception) {
                 Log.w("TpVpnService", "Could not configure DNS: ${e.message}")
             }
