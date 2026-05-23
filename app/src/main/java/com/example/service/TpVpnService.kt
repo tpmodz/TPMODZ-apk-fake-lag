@@ -25,6 +25,7 @@ class TpVpnService : VpnService() {
 
     private var vpnInterface: ParcelFileDescriptor? = null
     private var serviceJob: Job? = null
+    private var packetReaderJob: Job? = null
     private val scope = CoroutineScope(Dispatchers.Default)
 
     private var currentAppliedPackages: Set<String> = emptySet()
@@ -120,9 +121,28 @@ class TpVpnService : VpnService() {
         try {
             val builder = Builder()
             builder.setSession("TPMODZ Game Network Control")
-            builder.setMtu(1500)
+            builder.setMtu(1200) // Lower MTU is safer for general carrier configurations
+
+            // IPv4 Allocation and Routing
             builder.addAddress("10.0.0.1", 24)
             builder.addRoute("0.0.0.0", 0)
+
+            // IPv6 Allocation and Routing (Crucial for modern apps/games that bypass IPv4 VPNs)
+            try {
+                builder.addAddress("fd00::1", 64)
+                builder.addRoute("::", 0)
+            } catch (e: Exception) {
+                Log.w("TpVpnService", "Could not configure IPv6: ${e.message}")
+            }
+
+            // Route DNS to our local blackhole so domain lookup falls back or stalls instantly
+            try {
+                builder.addDnsServer("8.8.8.8")
+                builder.addDnsServer("1.1.1.1")
+                builder.addDnsServer("2001:4860:4860::8888")
+            } catch (e: Exception) {
+                Log.w("TpVpnService", "Could not configure DNS: ${e.message}")
+            }
 
             var addedAny = false
             for (p in packages) {
@@ -137,14 +157,37 @@ class TpVpnService : VpnService() {
             if (addedAny) {
                 vpnInterface = builder.establish()
                 currentAppliedPackages = packages
+                startPacketReader()
             }
         } catch (e: Exception) {
             Log.e("TpVpnService", "Error establishing VPN: ${e.message}")
         }
     }
 
+    private fun startPacketReader() {
+        packetReaderJob?.cancel()
+        val pfd = vpnInterface ?: return
+        packetReaderJob = CoroutineScope(Dispatchers.IO).launch {
+            val buffer = ByteArray(32768)
+            val inputStream = java.io.FileInputStream(pfd.fileDescriptor)
+            try {
+                while (vpnInterface != null) {
+                    val read = inputStream.read(buffer)
+                    if (read <= 0) {
+                        delay(20)
+                    }
+                    // Discard the packets. This acts as a real, complete firewall drop (blackhole).
+                }
+            } catch (e: Exception) {
+                // Ignore socket/pipe closed
+            }
+        }
+    }
+
     @Synchronized
     private fun closeTunnel() {
+        packetReaderJob?.cancel()
+        packetReaderJob = null
         try {
             vpnInterface?.close()
         } catch (e: IOException) {
