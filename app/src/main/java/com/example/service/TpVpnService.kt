@@ -10,6 +10,8 @@ import androidx.core.app.NotificationCompat
 import com.example.MainActivity
 import com.example.state.VpnStateTracker
 import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.collectLatest
 import java.io.FileInputStream
 import java.io.IOException
 
@@ -51,50 +53,111 @@ class TpVpnService : VpnService() {
 
     // ================= VPN LOOP =================
 
+    private data class VpnStateConfig(
+        val isDisconnect: Boolean,
+        val isFakePing: Boolean,
+        val pingVal: Int,
+        val selected: Set<String>
+    )
+
     private suspend fun runVpnLoop() {
-        try {
-            establishVpn()
-
-            val input = FileInputStream(vpnInterface?.fileDescriptor)
-
-            val buffer = ByteArray(32767)
-
-            while (isActive) {
-                val len = input.read(buffer)
-
-                if (len > 0) {
-                    // DROP PACKET (blackhole style)
-                    // bạn có thể xử lý fake lag / filter tại đây
-                    VpnStateTracker.setLivePing((50..200).random())
-                } else {
-                    delay(10)
-                }
+        combine(
+            VpnStateTracker.isDisconnecting,
+            VpnStateTracker.isFakePingEnabled,
+            VpnStateTracker.fakePingValue,
+            VpnStateTracker.selectedPackages
+        ) { isDisconnect, isFakePing, pingVal, selected ->
+            VpnStateConfig(isDisconnect, isFakePing, pingVal, selected)
+        }.collectLatest { config ->
+            if (!VpnStateTracker.isVpnActive.value) {
+                closeTunnel()
+                return@collectLatest
             }
 
-        } catch (e: Exception) {
-            Log.e("TPVPN", "VPN loop error: ${e.message}")
+            if (config.isDisconnect && config.selected.isNotEmpty()) {
+                VpnStateTracker.setLivePing(999)
+                establishVpn(config.selected)
+
+                val pfd = vpnInterface
+                if (pfd != null) {
+                    val input = FileInputStream(pfd.fileDescriptor)
+                    val buffer = ByteArray(32767)
+                    while (currentCoroutineContext().isActive) {
+                        try {
+                            val len = input.read(buffer)
+                            if (len <= 0) {
+                                delay(10)
+                            }
+                        } catch (e: Exception) {
+                            break
+                        }
+                    }
+                } else {
+                    delay(50)
+                }
+            } else if (config.isFakePing && config.selected.isNotEmpty()) {
+                VpnStateTracker.setLivePing(config.pingVal)
+                val blockDuration = config.pingVal.coerceIn(10, 999).toLong()
+
+                while (currentCoroutineContext().isActive) {
+                    establishVpn(config.selected)
+
+                    val pfd = vpnInterface
+                    if (pfd != null) {
+                        val input = FileInputStream(pfd.fileDescriptor)
+                        val buffer = ByteArray(32767)
+                        val start = System.currentTimeMillis()
+                        while (System.currentTimeMillis() - start < blockDuration && currentCoroutineContext().isActive) {
+                            try {
+                                if (input.available() > 0) {
+                                    input.read(buffer)
+                                } else {
+                                    delay(5)
+                                }
+                            } catch (e: Exception) {
+                                break
+                            }
+                        }
+                    } else {
+                        delay(blockDuration)
+                    }
+
+                    closeTunnel()
+                    delay(120)
+                }
+            } else {
+                VpnStateTracker.setLivePing(15)
+                closeTunnel()
+                delay(Long.MAX_VALUE)
+            }
         }
     }
 
     // ================= VPN SETUP =================
 
-    private fun establishVpn() {
+    private fun establishVpn(selected: Set<String>) {
         if (vpnInterface != null) return
 
         val builder = Builder()
-
         builder.setSession("TPMODZ VPN")
         builder.setMtu(1400)
 
-        // IPv4 tunnel
         builder.addAddress("10.1.0.2", 24)
         builder.addRoute("0.0.0.0", 0)
 
-        // DNS fake route
-        builder.addDnsServer("8.8.8.8")
+        try {
+            builder.addAddress("fd00::1", 64)
+            builder.addRoute("::", 0)
+        } catch (e: Exception) {
+            Log.w("TPVPN", "IPv6 address failed: ${e.message}")
+        }
 
-        // Apply selected apps (IMPORTANT PART)
-        val selected = VpnStateTracker.selectedPackages.value
+        try {
+            builder.addDnsServer("10.1.0.2")
+            builder.addDnsServer("fd00::1")
+        } catch (e: Exception) {
+            Log.w("TPVPN", "DNS config failed: ${e.message}")
+        }
 
         if (selected.isNotEmpty()) {
             for (pkg in selected) {
@@ -111,6 +174,15 @@ class TpVpnService : VpnService() {
         if (vpnInterface == null) {
             Log.e("TPVPN", "Failed to establish VPN")
         }
+    }
+
+    private fun closeTunnel() {
+        try {
+            vpnInterface?.close()
+        } catch (e: IOException) {
+            Log.e("TPVPN", "Close error: ${e.message}")
+        }
+        vpnInterface = null
     }
 
     // ================= FOREGROUND =================

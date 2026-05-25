@@ -15,11 +15,19 @@ object VpnStateTracker {
     private const val KEY_CUT_SECONDS = "cut_seconds"
     private const val KEY_CUT_MILLIS = "cut_millis"
     private const val KEY_IS_INFINITE = "is_infinite"
+    private const val KEY_IS_ALL_APPS = "is_all_apps"
+    private const val KEY_SETUP_COMPLETED = "setup_completed"
 
     // ================= STATE =================
 
     private val _isVpnActive = MutableStateFlow(false)
     val isVpnActive = _isVpnActive.asStateFlow()
+
+    private val _isAllAppsEnabled = MutableStateFlow(false)
+    val isAllAppsEnabled = _isAllAppsEnabled.asStateFlow()
+
+    private val _setupCompleted = MutableStateFlow(false)
+    val setupCompleted = _setupCompleted.asStateFlow()
 
     private val _selectedPackages = MutableStateFlow<Set<String>>(emptySet())
     val selectedPackages = _selectedPackages.asStateFlow()
@@ -54,9 +62,12 @@ object VpnStateTracker {
     private val _currentLivePing = MutableStateFlow(0)
     val currentLivePing = _currentLivePing.asStateFlow()
 
+    private var appContext: Context? = null
+
     // ================= INIT =================
 
     fun init(context: Context) {
+        appContext = context.applicationContext
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
         _selectedPackages.value =
@@ -69,6 +80,8 @@ object VpnStateTracker {
         _cutMillis.value = prefs.getInt(KEY_CUT_MILLIS, 0)
         _isInfinite.value = prefs.getBoolean(KEY_IS_INFINITE, false)
         _isOverlayActive.value = prefs.getBoolean(KEY_OVERLAY_ACTIVE, false)
+        _isAllAppsEnabled.value = prefs.getBoolean(KEY_IS_ALL_APPS, false)
+        _setupCompleted.value = prefs.getBoolean(KEY_SETUP_COMPLETED, false)
     }
 
     // ================= VPN =================
@@ -77,7 +90,28 @@ object VpnStateTracker {
         _isVpnActive.value = active
     }
 
+    fun setAllAppsEnabled(context: Context, enabled: Boolean) {
+        _isAllAppsEnabled.value = enabled
+        saveBool(context, KEY_IS_ALL_APPS, enabled)
+    }
+
+    fun setSetupCompleted(context: Context, completed: Boolean) {
+        _setupCompleted.value = completed
+        saveBool(context, KEY_SETUP_COMPLETED, completed)
+    }
+
     // ================= APP SELECTION =================
+
+    fun toggleApp(packageName: String) {
+        val set = _selectedPackages.value.toMutableSet()
+        if (set.contains(packageName)) {
+            set.remove(packageName)
+        } else {
+            set.add(packageName)
+        }
+        _selectedPackages.value = set
+        appContext?.let { saveSet(it, KEY_SELECTED_PACKAGES, set) }
+    }
 
     fun toggleSelectedPackage(context: Context, packageName: String) {
         val set = _selectedPackages.value.toMutableSet()
