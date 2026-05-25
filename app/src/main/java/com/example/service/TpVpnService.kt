@@ -19,6 +19,7 @@ class TpVpnService : VpnService() {
 
     private var vpnInterface: ParcelFileDescriptor? = null
     private var job: Job? = null
+    private var readerJob: Job? = null
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     companion object {
@@ -69,66 +70,60 @@ class TpVpnService : VpnService() {
         ) { isDisconnect, isFakePing, pingVal, selected ->
             VpnStateConfig(isDisconnect, isFakePing, pingVal, selected)
         }.collectLatest { config ->
-            if (!VpnStateTracker.isVpnActive.value) {
-                closeTunnel()
-                return@collectLatest
-            }
+            try {
+                if (!VpnStateTracker.isVpnActive.value) {
+                    closeTunnel()
+                    return@collectLatest
+                }
 
-            if (config.isDisconnect && config.selected.isNotEmpty()) {
-                VpnStateTracker.setLivePing(999)
-                establishVpn(config.selected)
+                if (config.isDisconnect && config.selected.isNotEmpty()) {
+                    VpnStateTracker.setLivePing(999)
+                    establishVpn(config.selected)
+                    vpnInterface?.let { startPacketDiscarder(it) }
+                    // Keep this coroutine suspended and responsive to cancellation
+                    delay(Long.MAX_VALUE)
+                } else if (config.isFakePing && config.selected.isNotEmpty()) {
+                    VpnStateTracker.setLivePing(config.pingVal)
+                    val blockDuration = config.pingVal.coerceIn(10, 999).toLong()
 
-                val pfd = vpnInterface
-                if (pfd != null) {
-                    val input = FileInputStream(pfd.fileDescriptor)
-                    val buffer = ByteArray(32767)
                     while (currentCoroutineContext().isActive) {
-                        try {
-                            val len = input.read(buffer)
-                            if (len <= 0) {
-                                delay(10)
-                            }
-                        } catch (e: Exception) {
-                            break
+                        establishVpn(config.selected)
+                        val pfd = vpnInterface
+                        if (pfd != null) {
+                            startPacketDiscarder(pfd)
+                            delay(blockDuration)
+                        } else {
+                            delay(blockDuration)
                         }
+
+                        closeTunnel()
+                        delay(120)
                     }
                 } else {
-                    delay(50)
-                }
-            } else if (config.isFakePing && config.selected.isNotEmpty()) {
-                VpnStateTracker.setLivePing(config.pingVal)
-                val blockDuration = config.pingVal.coerceIn(10, 999).toLong()
-
-                while (currentCoroutineContext().isActive) {
-                    establishVpn(config.selected)
-
-                    val pfd = vpnInterface
-                    if (pfd != null) {
-                        val input = FileInputStream(pfd.fileDescriptor)
-                        val buffer = ByteArray(32767)
-                        val start = System.currentTimeMillis()
-                        while (System.currentTimeMillis() - start < blockDuration && currentCoroutineContext().isActive) {
-                            try {
-                                if (input.available() > 0) {
-                                    input.read(buffer)
-                                } else {
-                                    delay(5)
-                                }
-                            } catch (e: Exception) {
-                                break
-                            }
-                        }
-                    } else {
-                        delay(blockDuration)
-                    }
-
+                    VpnStateTracker.setLivePing(15)
                     closeTunnel()
-                    delay(120)
+                    delay(Long.MAX_VALUE)
                 }
-            } else {
-                VpnStateTracker.setLivePing(15)
+            } finally {
                 closeTunnel()
-                delay(Long.MAX_VALUE)
+            }
+        }
+    }
+
+    private fun startPacketDiscarder(pfd: ParcelFileDescriptor) {
+        readerJob?.cancel()
+        readerJob = scope.launch(Dispatchers.IO) {
+            try {
+                val input = FileInputStream(pfd.fileDescriptor)
+                val buffer = ByteArray(32767)
+                while (isActive) {
+                    val len = input.read(buffer)
+                    if (len <= 0) {
+                        delay(10)
+                    }
+                }
+            } catch (e: Exception) {
+                // Ignore since PFD was closed
             }
         }
     }
@@ -178,8 +173,10 @@ class TpVpnService : VpnService() {
 
     private fun closeTunnel() {
         try {
+            readerJob?.cancel()
+            readerJob = null
             vpnInterface?.close()
-        } catch (e: IOException) {
+        } catch (e: Exception) {
             Log.e("TPVPN", "Close error: ${e.message}")
         }
         vpnInterface = null
