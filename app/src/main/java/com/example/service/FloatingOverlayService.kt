@@ -301,6 +301,7 @@ class FloatingOverlayService : Service(), LifecycleOwner, ViewModelStoreOwner, S
             ) { expanded ->
                 if (!expanded) {
                     // Small circular state (Closed/Collapsed icon)
+                    val activeColor = if (isDisconnecting) warningRed else greenNeon
                     Box(
                         modifier = Modifier
                             .size(56.dp)
@@ -311,7 +312,7 @@ class FloatingOverlayService : Service(), LifecycleOwner, ViewModelStoreOwner, S
                                     colors = listOf(Color(0xFF1E1535), darkBg)
                                 )
                             )
-                            .border(2.dp, if (isVpnActive) greenNeon else purpleNeon, CircleShape),
+                            .border(2.dp, activeColor, CircleShape),
                         contentAlignment = Alignment.Center
                     ) {
                         Column(
@@ -319,23 +320,18 @@ class FloatingOverlayService : Service(), LifecycleOwner, ViewModelStoreOwner, S
                             verticalArrangement = Arrangement.Center
                         ) {
                             Text(
-                                "TP",
-                                color = if (isVpnActive) greenNeon else Color.White,
+                                if (isDisconnecting) "ON" else "OFF",
+                                color = activeColor,
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.Bold,
                                 fontFamily = FontFamily.Monospace
                             )
+                            Spacer(modifier = Modifier.height(2.dp))
                             Box(
                                 modifier = Modifier
                                     .size(6.dp)
                                     .clip(CircleShape)
-                                    .background(
-                                        when {
-                                            isDisconnecting -> warningRed
-                                            isVpnActive -> greenNeon
-                                            else -> Color.Gray
-                                        }
-                                    )
+                                    .background(activeColor)
                             )
                         }
                     }
@@ -503,6 +499,18 @@ class FloatingOverlayService : Service(), LifecycleOwner, ViewModelStoreOwner, S
 
     private fun triggerDisconnectCut() {
         if (VpnStateTracker.isDisconnecting.value) return
+
+        // Auto-start TPVpnService if it is not currently running
+        if (!VpnStateTracker.isVpnActive.value) {
+            val intent = Intent(this, TpVpnService::class.java)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                startForegroundService(intent)
+            } else {
+                startService(intent)
+            }
+            VpnStateTracker.setVpnActive(true)
+        }
+
         val totalMs = if (VpnStateTracker.isInfinite.value) -1 else (VpnStateTracker.cutSeconds.value * 1000 + VpnStateTracker.cutMillis.value)
         VpnStateTracker.setDisconnecting(true, totalMs)
         dismissJob?.cancel()

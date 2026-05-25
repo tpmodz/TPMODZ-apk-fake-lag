@@ -84,21 +84,10 @@ class TpVpnService : VpnService() {
                     delay(Long.MAX_VALUE)
                 } else if (config.isFakePing && config.selected.isNotEmpty()) {
                     VpnStateTracker.setLivePing(config.pingVal)
-                    val blockDuration = config.pingVal.coerceIn(10, 999).toLong()
-
-                    while (currentCoroutineContext().isActive) {
-                        establishVpn(config.selected)
-                        val pfd = vpnInterface
-                        if (pfd != null) {
-                            startPacketDiscarder(pfd)
-                            delay(blockDuration)
-                        } else {
-                            delay(blockDuration)
-                        }
-
-                        closeTunnel()
-                        delay(120)
-                    }
+                    establishVpn(config.selected)
+                    vpnInterface?.let { startPacketDiscarder(it) }
+                    // Keep tunnel open to drop packets as fake ping latency simulation
+                    delay(Long.MAX_VALUE)
                 } else {
                     VpnStateTracker.setLivePing(15)
                     closeTunnel()
@@ -147,12 +136,8 @@ class TpVpnService : VpnService() {
             Log.w("TPVPN", "IPv6 address failed: ${e.message}")
         }
 
-        try {
-            builder.addDnsServer("10.1.0.2")
-            builder.addDnsServer("fd00::1")
-        } catch (e: Exception) {
-            Log.w("TPVPN", "DNS config failed: ${e.message}")
-        }
+        // REMOVED ALL addDnsServer() CALLS to prevent system DNS re-routing lag.
+        // This ensures WiFi/cellular DNS settings remain intact and restore instantly.
 
         if (selected.isNotEmpty()) {
             for (pkg in selected) {
